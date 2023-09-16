@@ -20,14 +20,34 @@ public class DebugJellyfinMenuAction : IDebugAction
 		Console.WriteLine("Debug Jellyfin Installation on this Device...");
 		var checkData = new Dictionary<string, object>();
 
+		CancellationTokenSource cts = new CancellationTokenSource();
 		foreach (var jellyfinDebugStep in _debugSteps)
 		{
-			Console.Write(jellyfinDebugStep.Name);
-			var result = jellyfinDebugStep.Execute(checkData);
+			Console.WriteLine(jellyfinDebugStep.Name);
+			var result = jellyfinDebugStep.Execute(checkData, cts);
+
+			IDebugResult previousNotification = null;
 			await foreach (var notification in result)
 			{
+				if (notification is UpdateState updateNotification && previousNotification is not null)
+				{
+					updateNotification.Update(previousNotification);
+					await previousNotification.Render();
+					continue;
+				}
+
 				await notification.Render();
+				previousNotification = notification;
+			}
+
+			if (cts.IsCancellationRequested)
+			{
+				Console.WriteLine("<error>Abort</error> Cannot continue as an critical issue was detected.");
+				break;
 			}
 		}
+
+		Console.WriteLine("Press any key to close.");
+		System.Console.ReadKey(true);
 	}
 }

@@ -1,52 +1,59 @@
-﻿using Console = JellyfinDebug.ColoredConsole;
+﻿using static System.Net.Mime.MediaTypeNames;
+using Console = JellyfinDebug.ColoredConsole;
 namespace JellyfinDebug.DebuggerSteps;
 
-public class OkDebugResult : IDebugResult
+public record OkDebugResult : DebugResultBase
 {
-	public OkDebugResult(string text)
+	public OkDebugResult(string text) : base(text, "success")
 	{
-		Text = text;
+		Icon = NotificationIcon.OK;
+	}
+}
+public record UpdateState : DebugResultBase
+{
+	public UpdateState(NotificationIcon notificationIcon, string? text = null) : base(text, null)
+	{
+		Icon = notificationIcon;
 	}
 
-	public bool State { get; } = true;
-	public string Text { get; set; }
-
-	public ValueTask Render()
+	public void Update(IDebugResult previousNotification)
 	{
-		Console.WriteLine($" - [OK] <success>{Text}</success>");
-		return ValueTask.CompletedTask;
+		if (previousNotification is DebugResultBase updatable)
+		{
+			updatable.Icon = Icon;
+			updatable.Text = Text ?? updatable.Text;
+		}
 	}
 }
 
-public class InfoDebugResult : IDebugResult
+public record InfoDebugResult : DebugResultBase
 {
-	private readonly string _message;
-
-	public InfoDebugResult(string message)
+	public InfoDebugResult(string text) : base(text, "info")
 	{
-		_message = message;
-	}
-	public bool State { get; }
-	public ValueTask Render()
-	{
-		Console.WriteLine($" - [INFO] <info>{_message}</info>");
-		return ValueTask.CompletedTask;
+		Icon = NotificationIcon.INF;
 	}
 }
 
-public class ErrorDebugInfo : IDebugResult
+public record ErrorDebugInfo : DebugResultBase
 {
-	private readonly string _text;
-
-	public ErrorDebugInfo(string text)
+	public ErrorDebugInfo(string text) : base(text, $"error")
 	{
-		_text = text;
+		Icon = NotificationIcon.ERR;
 	}
+}
 
-	public bool State { get; } = false;
-	public ValueTask Render()
+public record WarnDebugInfo : DebugResultBase
+{
+	public WarnDebugInfo(string text) : base(text, $"warn")
 	{
-		Console.WriteLine($" - [ERR] <error>{_text}</error>");
-		return ValueTask.CompletedTask;
+		Icon = NotificationIcon.WARN;
+	}
+}
+
+public record NoteDebugInfo : DebugResultBase
+{
+	public NoteDebugInfo(string text) : base(text, null)
+	{
+		Icon = NotificationIcon.NONE;
 	}
 }

@@ -22,8 +22,8 @@ for (int i = 0; i < actions.Length; i++)
 	Console.WriteLine($"\t {i + 1} - {action.Name}");
 }
 
-int id;
-while (true)
+int id = 1;
+while (false)
 {
 	Console.Write("Choose your Action:");
 	var input = Console.ReadLine();

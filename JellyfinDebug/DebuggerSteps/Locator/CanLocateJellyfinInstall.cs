@@ -1,13 +1,17 @@
 ﻿using System;
 using System.Diagnostics;
+using Microsoft.Extensions.Primitives;
+using ServiceLocator.Attributes;
 
 namespace JellyfinDebug.DebuggerSteps.Locator;
 using Console = JellyfinDebug.ColoredConsole;
 
+[TransientService(typeof(IJellyfinDebugStep))]
 public class CanLocateJellyfinInstall : IJellyfinDebugStep
 {
+	public float Order { get; } = 1;
 	public string Name { get; } = "Locate Jellyfin installation.";
-	public async IAsyncEnumerable<IDebugResult> Execute(IDictionary<string, object> data)
+	public async IAsyncEnumerable<IDebugResult> Execute(IDictionary<string, object> data, CancellationTokenSource abort)
 	{
 		yield return new InfoDebugResult("Check Operating System");
 		var osType = await OsTypeProcessor.GetType();
@@ -16,6 +20,7 @@ public class CanLocateJellyfinInstall : IJellyfinDebugStep
 			if (!Console.Ask("Do you run Jellyfin in Docker?"))
 			{
 				yield return new ErrorDebugInfo("Could not Determine a valid Operating System type.");
+				abort.Cancel();
 				yield break;
 			}
 
@@ -23,47 +28,50 @@ public class CanLocateJellyfinInstall : IJellyfinDebugStep
 		}
 
 		yield return new OkDebugResult($"Operating system is supported: {osType}");
+		var localJellyfinInstall = new LocalJellyfinInstall(osType);
 
-		var jellyfinProcesses = FindJellyfinProcess();
-		if (jellyfinProcesses.Length == 0)
-		{
-			yield return new ErrorDebugInfo("Jellyfin server process does not run.");
-			data["INSTALLPATH"] = GetDefaultInstallPath(osType);
-			if (data["INSTALLPATH"] == null)
-			{
+		var defaultInstallPath = GetDefaultInstallPath(osType);
 
-			}
-		}
-		else if (jellyfinProcesses.Length > 1)
+		if (!Path.Exists(Path.Combine(defaultInstallPath, "jellyfin.exe")))
 		{
-			yield return new ErrorDebugInfo("Found Multiple jellyfin server processes. This is potentially dangerous if multiple Jellyfin server processes try to access the same database.");
-			foreach (var jellyfinProcess in jellyfinProcesses)
+			yield return new WarnDebugInfo("Jellyfin server installation could not be found.");
+			defaultInstallPath = Console.AskStringNonNull("Please input the path to you jellyfin install folder");
+			yield return new NoteDebugInfo("Check Path exists.");
+			if (!Path.Exists(defaultInstallPath))
 			{
-				yield return new InfoDebugResult(
-					$"{jellyfinProcess.ProcessName} - '{jellyfinProcess.StartInfo.FileName}': {jellyfinProcess.StartInfo.Arguments}");
+				yield return
+					new ErrorDebugInfo("The path does not exist. Seems like you did not install Jellyfin.");
+				abort.Cancel();
+				yield break;
 			}
+			yield return new OkDebugResult("Manual Installation path Exists.");
+			yield return new NoteDebugInfo("Check Path contains Jellyfin.exe.");
+			if (!Path.Exists(Path.Combine(defaultInstallPath, "jellyfin.exe")))
+			{
+				yield return new ErrorDebugInfo("Jellyfin server installation could not be found.")
+					.With(new ErrorDebugInfo("The path you entered does not contain the <info>jellyfin.exe</info>."));
+				abort.Cancel();
+				yield break;
+			}
+			yield return new OkDebugResult("Jellyfin.exe found.");
 		}
 		else
 		{
-			var process = jellyfinProcesses[0];
-			yield return new OkDebugResult("Found exactly one jellyfin server process.");
-			data["INSTALLPATH"] = Path.GetDirectoryName(process.StartInfo.FileName);
+			yield return new InfoDebugResult($"Found jellyfin installation at '{defaultInstallPath}'");
 		}
+		localJellyfinInstall.InstallRoot = defaultInstallPath;
+
+		data["JF"] = localJellyfinInstall;
 	}
 
-	private Process[] FindJellyfinProcess()
-	{
-		return Process.GetProcessesByName("Jellyfin.exe");
-	}
-
-	private string GetDefaultInstallPath(OsType osType)
+	public static string? GetDefaultInstallPath(OsType osType)
 	{
 		switch (osType)
 		{
 			case OsType.Mac:
 				break;
 			case OsType.Windows:
-				break;
+				return "C:\\Program Files\\Jellyfin\\Server";
 			case OsType.Linux_arch:
 				break;
 			case OsType.Linux_Fedora:
@@ -79,5 +87,7 @@ public class CanLocateJellyfinInstall : IJellyfinDebugStep
 			case OsType.Linux:
 				break;
 		}
+
+		return null;
 	}
 }
